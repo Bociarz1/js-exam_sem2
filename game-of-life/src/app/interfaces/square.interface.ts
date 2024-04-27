@@ -6,7 +6,3 @@ export interface ISquareState {
   futureChecked?: boolean
 }
 
-export interface ISquaresStates {
-  [key:string]: ISquareState
-}
-

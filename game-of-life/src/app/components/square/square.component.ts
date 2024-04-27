@@ -1,6 +1,5 @@
-import {ChangeDetectionStrategy, Component, EventEmitter, Input, Output,} from '@angular/core';
+import {ChangeDetectionStrategy, Component, Input,} from '@angular/core';
 import {NgClass} from "@angular/common";
-import {ISquareState} from "../../interfaces/square.interface";
 import {GolStatus} from "../../enums/game-status.enum";
 
 
@@ -11,7 +10,7 @@ import {GolStatus} from "../../enums/game-status.enum";
     NgClass
   ],
   template: `
-    <div class="gol__square" [ngClass]="{'gol__square--checked': checkedState}" (click)="changeSquareChecked(!checkedState,gameStatus === GolStatus.PLAYING)"></div>`,
+    <div class="gol__square" [ngClass]="{'gol__square--checked': checked, 'gol__square--preparing': status === GolStatus.PREPARING}"></div>`,
   styles: [`
     :host {
       display: inline-block;
@@ -26,40 +25,19 @@ import {GolStatus} from "../../enums/game-status.enum";
       cursor: pointer;
     }
 
-    .gol__square--checked {
+    .gol__square--checked  {
+      background-color: green;
+    }
+    .gol__square--preparing:hover  {
       background-color: green;
     }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SquareComponent {
-  protected checkedState: boolean = false
-  protected gameStatus: GolStatus = GolStatus.PREPARING
-  @Input() set status(value: GolStatus) {
-    if(value === GolStatus.PREPARING && this.gameStatus === GolStatus.PLAYING) {
-      this.changeSquareChecked(false);
-    }
-    this.gameStatus = value;
-  };
-
-  @Input() set checked(value: boolean | undefined) {
-    if(value === undefined) return;
-    this.changeSquareChecked(value ?? false);
-
-  }
-  @Input() set coordinates(value: [number, number]) {
-    const [y, x] = value;
-    this.x = x;
-    this.y = y;
-  }
-  @Output() squareStateEmitter: EventEmitter<ISquareState> = new EventEmitter<ISquareState>();
-  protected x!: number;
-  protected y!: number;
-  protected changeSquareChecked(value: boolean, isChangeBlocked: boolean = false ): void {
-    if(isChangeBlocked) return;
-    this.checkedState = value
-    this.squareStateEmitter.emit({y:this.y, x:this.x,checked: value})
-  }
-
-  protected readonly GolStatus = GolStatus;
+  @Input()  status: GolStatus = GolStatus.PREPARING;
+  @Input()  checked: boolean = false;
+  @Input()  y: number = -1;
+  @Input()  x: number = -1;
+  protected  GolStatus = GolStatus;
 }
