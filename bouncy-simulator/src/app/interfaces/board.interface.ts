@@ -1,1 +1,4 @@
-export type IBoard = 'Y' |  'X' | '0' | '1'
+import {SquareTypeEnum} from "../enums/square-type.enum";
+
+export type ICoordinates = [number, number]
+export type IBoard = SquareTypeEnum[][];

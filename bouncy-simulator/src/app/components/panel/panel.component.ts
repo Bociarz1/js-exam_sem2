@@ -20,6 +20,7 @@ import {GameStatusEnum} from "../../enums/game-status.enum";
       }
       @case (GameStatusEnum.PLAYING) {
         <h1>Playing...</h1>
+        <button (click)="restartGame()">Restart Game</button>
       }
     }
   `,
@@ -31,6 +32,9 @@ export class PanelComponent {
  constructor(protected readonly bouncySimulatorService: BouncySimulatorService) {
  }
   protected finishLocateObstacle(): void {
-   this.bouncySimulatorService.status.set(GameStatusEnum.PREPARING_BALL)
+   this.bouncySimulatorService.setStatus(GameStatusEnum.PREPARING_BALL)
+  }
+  protected restartGame(): void {
+   this.bouncySimulatorService.restartGame();
   }
 }

@@ -1,6 +1,5 @@
 import {ChangeDetectionStrategy, Component, Input} from '@angular/core';
 import {SquareTypeEnum} from "../../enums/square-type.enum";
-import {IBoard} from "../../interfaces/board.interface";
 import {GameStatusEnum} from "../../enums/game-status.enum";
 import {NgClass} from "@angular/common";
 
@@ -67,7 +66,7 @@ import {NgClass} from "@angular/common";
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class SquareComponent {
-  @Input() fieldType!: IBoard | SquareTypeEnum;
+  @Input() fieldType!: SquareTypeEnum;
   @Input() status!: GameStatusEnum;
   protected readonly GameStatusEnum = GameStatusEnum;
 }

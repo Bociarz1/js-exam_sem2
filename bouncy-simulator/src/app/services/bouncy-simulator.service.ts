@@ -1,59 +1,90 @@
-import {Injectable, signal, WritableSignal} from '@angular/core';
-import {IBoard} from "../interfaces/board.interface";
+import {computed, Injectable, Signal, signal, WritableSignal} from '@angular/core';
 import {GameStatusEnum} from "../enums/game-status.enum";
 import {SquareTypeEnum} from "../enums/square-type.enum";
 import {interval, Subscription} from "rxjs";
 import {DirectionEnum} from "../enums/square-directions.enum";
+import {getInitialBoard} from "../consts/board.const";
+import {IBoard, ICoordinates} from "../interfaces/board.interface";
+import {BoardUtil} from "../utils/board.util";
 
 @Injectable({
   providedIn: 'root'
 })
 export class BouncySimulatorService {
-  public board: WritableSignal<IBoard[][]> = signal([
-    ['X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X'],
-    ['X', '0', '0', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X'],
-    ['X', '0', '0', '0', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X'],
-    ['X', '0', '0', '0', '0', 'X', 'X', 'X', 'X', 'X', 'X', 'X'],
-    ['X', '0', '0', '0', '0', '0', 'X', 'X', 'X', 'X', 'X', 'X'],
-    ['X', '0', '0', '0', '0', '0', '0', 'X', 'X', 'X', 'X', 'X'],
-    ['X', '0', '0', '0', '0', '0', '0', '0', 'X', 'X', 'X', 'X'],
-    ['X', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', 'X'],
-    ['X', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', 'X'],
-    ['X', '0', '0', '0', 'X', '0', '0', '0', '0', '0', '0', 'X'],
-    ['X', '0', '0', 'X', 'X', 'X', '0', '0', '0', '0', '0', 'X'],
-    ['X', '0', '0', '0', 'X', '0', '0', '0', '0', '0', '0', 'X'],
-    ['X', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', 'X'],
-    ['X', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', 'X'],
-    ['X', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0', 'X'],
-    ['X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X'],
-  ]);
-  public status: WritableSignal<GameStatusEnum> = signal(GameStatusEnum.PREPARING_OBSTACLES);
-  private ballPosition: [number, number] = [-1, -1];
-  private ballDirection!: DirectionEnum
+  private _board: WritableSignal<SquareTypeEnum[][]> = signal(getInitialBoard());
+  public readonly board: Signal<SquareTypeEnum[][]> = computed(() => this._board());
 
-  private interval$!: Subscription;
+  private _status: WritableSignal<GameStatusEnum> = signal(GameStatusEnum.PREPARING_OBSTACLES);
+  public readonly status: Signal<GameStatusEnum> = computed(() => this._status());
+
+  private _ballPosition: ICoordinates = [-1, -1];
+  private get ballPosition() {
+    return this._ballPosition
+  }
+  private set ballPosition(newBallPosition: ICoordinates) {
+    this._ballPosition = newBallPosition;
+  }
+
+  private _ballDirection!: DirectionEnum
+  private get ballDirection() {
+    return this._ballDirection
+  }
+  private set ballDirection(newBallDirection: DirectionEnum) {
+    this._ballDirection = newBallDirection;
+  }
+
+  private _interval$!: Subscription;
 
   constructor() {
+  }
+  public setStatus(newStatus: GameStatusEnum): void {
+    this._status.set(newStatus)
+  }
+
+  public updateBoard(y: number, x: number, squareType: SquareTypeEnum): void {
+    this._board.update((prevBoard: IBoard) => {
+      const newBoard: IBoard = [...prevBoard]
+      newBoard[y][x] = squareType;
+      return newBoard
+    })
+  }
+  private restartBoard(): void {
+    this._board.set(getInitialBoard());
+  }
+  public restartGame(): void {
+    this._interval$.unsubscribe();
+    this.restartBoard();
+    this.setStatus(GameStatusEnum.PREPARING_OBSTACLES)
+  }
+  private startBounce(): void {
+    this._interval$ = interval(1000).subscribe(() => {
+      this.calculateNewBallDirection();
+      this.moveBall()
+    })
   }
   public addObstacle(y:number,x:number): void {
     if(this.board()[y][x] === SquareTypeEnum.BORDER) return;
     this.updateBoard(y,x,SquareTypeEnum.OBSTACLE)
   }
-  public updateBoard(y: number, x: number, squareType: SquareTypeEnum): void {
-    this.board.update(prevBoard => {
-      const newBoard = [...prevBoard]
-      newBoard[y][x] = squareType;
-      return newBoard
-    })
+
+  private setRandomDirection(currentDirection: DirectionEnum): void {
+    const randomDirections: DirectionEnum[] = BoardUtil.setRandomDirections(currentDirection)
+    this.destroyObstacle(currentDirection);
+    const randomIndex: number = Math.floor(Math.random() * randomDirections.length);
+    this.ballDirection = randomDirections[randomIndex];
+  }
+  private destroyObstacle(directionOfObstacle: DirectionEnum): void {
+    const obstaclePosition: ICoordinates = BoardUtil.getObstaclePosition(this.ballPosition,directionOfObstacle)
+    this.updateBoard(obstaclePosition[0],obstaclePosition[1],SquareTypeEnum.FREE_FIELD)
   }
 
   public setInitialBallPosition(y: number, x: number): void {
-    const square: SquareTypeEnum = this.board()[y][x] as SquareTypeEnum
-    const isValidPosition = square === SquareTypeEnum.FREE_FIELD
+    const square: SquareTypeEnum = this.board()[y][x]
+    const isValidPosition: boolean = square === SquareTypeEnum.FREE_FIELD
     if (isValidPosition) {
       this.updateBoard(y,x, SquareTypeEnum.BALL);
       this.ballPosition = [y, x]
-      this.status.set(GameStatusEnum.PREPARING_DIRECTION)
+      this.setStatus(GameStatusEnum.PREPARING_DIRECTION)
     } else {
       return
     }
@@ -68,58 +99,12 @@ export class BouncySimulatorService {
     const isValidFieldType: boolean = square === SquareTypeEnum.FREE_FIELD
 
     if (isValidFieldType && isValidYPosition && isValidXPosition) {
-      this.detectDirection(this.ballPosition, [y,x]);
-      this.status.set(GameStatusEnum.PLAYING);
+      this.ballDirection = BoardUtil.detectDirection(this.ballPosition,[y,x])
+      this.setStatus(GameStatusEnum.PLAYING);
       this.startBounce();
     } else {
       return
     }
-  }
-
-  private detectDirection(ballPosition:[number,number],ballDirection:[number,number]): void {
-    const [yBallPosition,xBallPosition] = ballPosition;
-    const [yBallDirection,xBallDirection] = ballDirection;
-    let direction!: DirectionEnum;
-
-    if (yBallDirection - yBallPosition > 0) {
-      direction = DirectionEnum.DOWN;
-    } else if (yBallDirection - yBallPosition < 0) {
-      direction = DirectionEnum.UP;
-    }
-
-    if (xBallDirection - xBallPosition > 0) {
-      if (direction === DirectionEnum.UP) {
-        direction = DirectionEnum.UP_RIGHT;
-      } else if (direction === DirectionEnum.DOWN) {
-        direction = DirectionEnum.DOWN_RIGHT;
-      } else {
-        direction = DirectionEnum.RIGHT;
-      }
-    } else if (xBallDirection - xBallPosition < 0) {
-      if (direction === DirectionEnum.UP) {
-        direction = DirectionEnum.UP_LEFT;
-      } else if (direction === DirectionEnum.DOWN) {
-        direction = DirectionEnum.DOWN_LEFT;
-      } else {
-        direction = DirectionEnum.LEFT;
-      }
-    }
-
-    if (direction !== undefined) {
-      this.ballDirection = direction;
-    }
-
-  }
-  public getSquaresAround(yCoordinates:number, xCoordinates:number): SquareTypeEnum[] {
-    const up = this.board()[yCoordinates - 1][xCoordinates] as SquareTypeEnum
-    const upRight = this.board()[yCoordinates - 1][xCoordinates + 1] as SquareTypeEnum
-    const right = this.board()[yCoordinates][xCoordinates + 1] as SquareTypeEnum
-    const downRight = this.board()[yCoordinates + 1][xCoordinates + 1] as SquareTypeEnum
-    const down = this.board()[yCoordinates + 1][xCoordinates]as SquareTypeEnum
-    const downLeft = this.board()[yCoordinates + 1][xCoordinates - 1] as SquareTypeEnum
-    const left = this.board()[yCoordinates][xCoordinates - 1] as SquareTypeEnum
-    const upLeft = this.board()[yCoordinates - 1][xCoordinates - 1] as SquareTypeEnum
-    return [up, upRight, right, downRight, down, downLeft, left, upLeft];
   }
 
   public moveBall(): void {
@@ -157,15 +142,9 @@ export class BouncySimulatorService {
     this.updateBoard(this.ballPosition[0],this.ballPosition[1], SquareTypeEnum.BALL);
   }
 
-  private startBounce(): void {
-    this.interval$ = interval(1000).subscribe(() => {
-      this.checkBallDirection();
-      this.moveBall()
-    })
-  }
-  private checkBallDirection(): void {
-    const [y,x] = this.ballPosition
-    const squaresAround: SquareTypeEnum[] = this.getSquaresAround(y,x)
+  private calculateNewBallDirection(): void {
+    const [y,x] = this.ballPosition || []
+    const squaresAround: SquareTypeEnum[] = BoardUtil.getSquaresAround(this.board(),y,x)
 
     const isBorderUp: boolean = squaresAround[DirectionEnum.UP] === SquareTypeEnum.BORDER
     const isBorderUpRight: boolean = squaresAround[DirectionEnum.UP_RIGHT] === SquareTypeEnum.BORDER
@@ -176,15 +155,14 @@ export class BouncySimulatorService {
     const isBorderLeft: boolean = squaresAround[DirectionEnum.LEFT] === SquareTypeEnum.BORDER
     const isBorderUpLeft: boolean = squaresAround[DirectionEnum.UP_LEFT] === SquareTypeEnum.BORDER
 
-    const isObstacleUp = squaresAround[DirectionEnum.UP] === SquareTypeEnum.OBSTACLE;
-    const isObstacleUpRight = squaresAround[DirectionEnum.UP_RIGHT] === SquareTypeEnum.OBSTACLE;
-    const isObstacleRight = squaresAround[DirectionEnum.RIGHT] === SquareTypeEnum.OBSTACLE;
-    const isObstacleDownRight = squaresAround[DirectionEnum.DOWN_RIGHT] === SquareTypeEnum.OBSTACLE;
-    const isObstacleDown = squaresAround[DirectionEnum.DOWN] === SquareTypeEnum.OBSTACLE;
-    const isObstacleDownLeft = squaresAround[DirectionEnum.DOWN_LEFT] === SquareTypeEnum.OBSTACLE;
-    const isObstacleLeft = squaresAround[DirectionEnum.LEFT] === SquareTypeEnum.OBSTACLE;
-    const isObstacleUpLeft = squaresAround[DirectionEnum.UP_LEFT] === SquareTypeEnum.OBSTACLE;
-
+    const isObstacleUp: boolean = squaresAround[DirectionEnum.UP] === SquareTypeEnum.OBSTACLE;
+    const isObstacleUpRight: boolean = squaresAround[DirectionEnum.UP_RIGHT] === SquareTypeEnum.OBSTACLE;
+    const isObstacleRight: boolean = squaresAround[DirectionEnum.RIGHT] === SquareTypeEnum.OBSTACLE;
+    const isObstacleDownRight: boolean = squaresAround[DirectionEnum.DOWN_RIGHT] === SquareTypeEnum.OBSTACLE;
+    const isObstacleDown: boolean = squaresAround[DirectionEnum.DOWN] === SquareTypeEnum.OBSTACLE;
+    const isObstacleDownLeft: boolean = squaresAround[DirectionEnum.DOWN_LEFT] === SquareTypeEnum.OBSTACLE;
+    const isObstacleLeft: boolean = squaresAround[DirectionEnum.LEFT] === SquareTypeEnum.OBSTACLE;
+    const isObstacleUpLeft: boolean = squaresAround[DirectionEnum.UP_LEFT] === SquareTypeEnum.OBSTACLE;
 
     switch(this.ballDirection) {
       case DirectionEnum.UP:
@@ -242,90 +220,5 @@ export class BouncySimulatorService {
       default:
         break;
     }
-  }
-    private setRandomDirection(currentDirection: DirectionEnum): void {
-    let directions: DirectionEnum[] = [];
-      const randomUpDirections: DirectionEnum[] = [DirectionEnum.DOWN_LEFT, DirectionEnum.DOWN_RIGHT];
-      const randomLeftDirections: DirectionEnum[] = [DirectionEnum.UP_RIGHT, DirectionEnum.DOWN_RIGHT];
-      const randomRightDirections: DirectionEnum[] = [DirectionEnum.UP_LEFT, DirectionEnum.DOWN_LEFT];
-      const randomDownDirections: DirectionEnum[] = [DirectionEnum.UP_LEFT, DirectionEnum.UP_RIGHT];
-
-      const randomUpRightDirections: DirectionEnum[] = [DirectionEnum.LEFT, DirectionEnum.DOWN];
-      const randomDownRightDirections: DirectionEnum[] = [DirectionEnum.LEFT, DirectionEnum.UP];
-      const randomDownLeftDirections: DirectionEnum[] = [DirectionEnum.UP, DirectionEnum.RIGHT];
-      const randomUpLeftDirections: DirectionEnum[] = [DirectionEnum.RIGHT, DirectionEnum.DOWN];
-
-      switch(currentDirection) {
-        case DirectionEnum.UP:
-          this.destroyObstacle(DirectionEnum.UP)
-          directions = randomUpDirections;
-          break;
-        case DirectionEnum.UP_RIGHT:
-          this.destroyObstacle(DirectionEnum.UP_RIGHT)
-          directions = randomUpRightDirections;
-          break;
-        case DirectionEnum.RIGHT:
-          this.destroyObstacle(DirectionEnum.RIGHT)
-          directions = randomRightDirections;
-          break;
-        case DirectionEnum.DOWN_RIGHT:
-          this.destroyObstacle(DirectionEnum.DOWN_RIGHT)
-          directions = randomDownRightDirections;
-          break;
-        case DirectionEnum.DOWN:
-          this.destroyObstacle(DirectionEnum.DOWN)
-          directions = randomDownDirections;
-          break;
-        case DirectionEnum.DOWN_LEFT:
-          this.destroyObstacle(DirectionEnum.DOWN_LEFT)
-          directions = randomDownLeftDirections;
-          break;
-        case DirectionEnum.LEFT:
-          this.destroyObstacle(DirectionEnum.LEFT)
-          directions = randomLeftDirections;
-          break;
-        case DirectionEnum.UP_LEFT:
-          this.destroyObstacle(DirectionEnum.UP_LEFT)
-          directions = randomUpLeftDirections;
-          break;
-        default:
-          break;
-      }
-
-      const randomIndex: number = Math.floor(Math.random() * directions.length);
-      this.ballDirection = directions[randomIndex];
-    }
-  private destroyObstacle(directionOfObstacle: DirectionEnum): void {
-  const [yBallPosition,xBallPosition] = this.ballPosition || [];
-  let obstaclePosition: [number,number] = [-1,-1]
-    switch(directionOfObstacle) {
-      case DirectionEnum.UP:
-        obstaclePosition = [yBallPosition - 1, xBallPosition];
-        break;
-      case DirectionEnum.UP_RIGHT:
-        obstaclePosition = [yBallPosition - 1, xBallPosition + 1];
-        break;
-      case DirectionEnum.RIGHT:
-        obstaclePosition = [yBallPosition, xBallPosition + 1];
-        break;
-      case DirectionEnum.DOWN_RIGHT:
-        obstaclePosition = [yBallPosition + 1, xBallPosition + 1];
-        break;
-      case DirectionEnum.DOWN:
-        obstaclePosition = [yBallPosition + 1, xBallPosition];
-        break;
-      case DirectionEnum.DOWN_LEFT:
-        obstaclePosition = [yBallPosition + 1, xBallPosition - 1];
-        break;
-      case DirectionEnum.LEFT:
-        obstaclePosition = [yBallPosition, xBallPosition - 1];
-        break;
-      case DirectionEnum.UP_LEFT:
-        obstaclePosition = [yBallPosition - 1, xBallPosition - 1];
-        break;
-      default:
-        break;
-    }
-    this.updateBoard(obstaclePosition[0],obstaclePosition[1],SquareTypeEnum.FREE_FIELD)
   }
 }

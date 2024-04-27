@@ -30,7 +30,6 @@ export class GridComponent {
   constructor(protected readonly bouncySimulatorService: BouncySimulatorService) {
   }
   protected handleSquareClick(y:number, x:number): void {
-    console.log(this.bouncySimulatorService.status())
     switch (this.bouncySimulatorService.status()) {
       case GameStatusEnum.PREPARING_OBSTACLES:
         this.bouncySimulatorService.addObstacle(y,x);
