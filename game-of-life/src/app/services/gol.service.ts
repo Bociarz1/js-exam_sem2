@@ -1,87 +1,76 @@
-import {DestroyRef, Injectable, signal, WritableSignal} from '@angular/core';
+import {computed, Injectable, Signal, signal, WritableSignal} from '@angular/core';
 import {GolStatus} from "../enums/game-status.enum";
-import { ISquaresStates, ISquareState} from "../interfaces/square.interface";
+import { ISquareState} from "../interfaces/square.interface";
 import {ArrayUtils} from "../utils/array.utils";
 import {interval, Subject, Subscription, takeUntil} from "rxjs";
-import {takeUntilDestroyed} from "@angular/core/rxjs-interop";
+import {SquareUtil} from "../utils/square.util";
 
 @Injectable({
   providedIn: 'root'
 })
 export class GolService {
-  public status: WritableSignal<GolStatus> = signal(GolStatus.PREPARING);
-  public squaresStates: ISquaresStates = {}
-  public futureSquaresStates : WritableSignal<ISquareState[]> = signal([]);
+  private _status: WritableSignal<GolStatus> = signal(GolStatus.PREPARING);
+  public readonly status: Signal<GolStatus> = computed(() => this._status())
+
+  private _squaresStates : WritableSignal<ISquareState[]> = signal([]);
+  public readonly squaresStates : Signal<ISquareState[]> = computed(() => this._squaresStates());
+
   private interval$: Subscription = new Subscription();
-  constructor() { }
 
+  public changeSquareState(squareState: ISquareState):void {
+    const {y,x} = squareState || {}
+    const squareIndex: number = SquareUtil.getIndexOfSquare(y,x,this.squaresStates());
 
+    if(squareIndex === -1) {
+      this._squaresStates.update((prev:ISquareState[]) => [...prev, {...squareState, checked: true}])
+    } else {
+      this._squaresStates.update((prev:ISquareState[]) => {
+        prev[squareIndex] = {...squareState, checked: !prev[squareIndex].checked}
+        const isUnChecked: boolean = !prev[squareIndex].checked
+        isUnChecked ? prev.splice(squareIndex,1) : null;
+        return prev
+      })
+    }
+  }
   public startGame(): void {
-    this.status.set(GolStatus.PLAYING);
+    this._status.set(GolStatus.PLAYING);
     this.interval$ = interval(500).subscribe(() => {
-      console.log('interval')
       this.startOneCycle()
     })
   }
   public stopGame(): void {
     this.interval$.unsubscribe();
-    this.status.set(GolStatus.PREPARING);
-    this.squaresStates = {};
-    this.futureSquaresStates.set([])
+    this._status.set(GolStatus.PREPARING);
+    this._squaresStates.set([])
 
   }
-  private setSquaresStates(checkedSquares: ISquareState[]): any {
+  private setSquaresStates(checkedSquares: ISquareState[]): ISquareState[][] {
     const checkedSquaresStates: ISquareState[] = []
     const uncheckedSquaresStatesAroundChecked: ISquareState[][] = []
 
     checkedSquares.forEach((square: ISquareState) => {
       const {y,x} = square || {};
-      const coordinatesAround: ISquareState[] = this.getCoordinatesAround(y,x, checkedSquares)
+      const coordinatesAround: ISquareState[] = SquareUtil.getCoordinatesAround(y,x, checkedSquares)
 
-      checkedSquaresStates.push({...square, checkedAround: this.getCheckedAround(coordinatesAround).length});
-      uncheckedSquaresStatesAroundChecked.push(this.getUncheckedAround(coordinatesAround))
+      checkedSquaresStates.push({...square, checkedAround: SquareUtil.getCheckedAround(coordinatesAround).length});
+      uncheckedSquaresStatesAroundChecked.push(SquareUtil.getUncheckedAround(coordinatesAround))
     })
       const matchingElements:{value: ISquareState; amount: number}[] = ArrayUtils.countMatchingElements(uncheckedSquaresStatesAroundChecked);
       const uncheckedSquaresStates: ISquareState[] = matchingElements.map((item: {value: ISquareState; amount: number}) => {
         return {...item.value, checkedAround: item.amount}
       })
-
       return [checkedSquaresStates,uncheckedSquaresStates];
   }
   private startOneCycle(): void {
-    const checkedSquares: ISquareState[] = Object.values(this.squaresStates).filter((squareState: ISquareState): boolean => squareState.checked ?? false);
+    const checkedSquares: ISquareState[] = this.squaresStates().filter((squareState: ISquareState): boolean => !!squareState.checked);
 
     const [checkedSquaresStates, uncheckedSquaresStates] = this.setSquaresStates(checkedSquares);
     const updatingSquares: ISquareState[] = [...checkedSquaresStates,...uncheckedSquaresStates]
     this.futureSquaresBehaviour(updatingSquares)
   }
-  private getCoordinatesAround(y: number,x: number, checkedSquares: ISquareState[]):ISquareState[] {
-
-    const checkedSquaresWithoutCheckedKey: ISquareState[] = checkedSquares.map(item => ({y:item.y,x:item.x}))
-    const coordinatesAround: ISquareState[] = [
-      { y: y, x: x - 1 },
-      { y: y - 1, x: x - 1},
-      { y: y + 1, x: x - 1 },
-      { y: y, x: x + 1 },
-      { y: y - 1, x: x + 1 },
-      { y: y + 1, x: x + 1 },
-      { y: y - 1, x: x },
-      { y: y + 1, x: x },
-    ]
-    return coordinatesAround.map((item: ISquareState) => {
-      return {...item, checked: ArrayUtils.contains(item,checkedSquaresWithoutCheckedKey)}
-    })
-}
-  private getCheckedAround(aroundSquaresCoordinates: ISquareState[]): ISquareState[] {
-    return aroundSquaresCoordinates.filter((square: ISquareState) => square.checked)
-  }
-  private getUncheckedAround(aroundSquaresCoordinates: ISquareState[]): ISquareState[] {
-    return aroundSquaresCoordinates.filter((square: ISquareState) => !square.checked)
-  }
   private futureSquaresBehaviour(updatingSquares: ISquareState[]) {
     let checkedSquareBehaviour: ISquareState[] = updatingSquares.filter((item:ISquareState) => item.checked)
     let unCheckedSquareBehaviour: ISquareState[] = updatingSquares.filter((item:ISquareState) => !item.checked)
-
 
     checkedSquareBehaviour = checkedSquareBehaviour
       .map((item:ISquareState) => {
@@ -89,14 +78,13 @@ export class GolService {
        if(item.checkedAround === 2 || item.checkedAround === 3) {
          isAlive = true
       }
-       return {...item, futureChecked: isAlive}
+       return {...item, checked: isAlive}
     })
 
     unCheckedSquareBehaviour = unCheckedSquareBehaviour
       .filter((item: ISquareState):boolean => item.checkedAround === 3)
-      .map((item: ISquareState) => ({...item, futureChecked: true}))
+      .map((item: ISquareState) => ({...item, checked: true}))
 
-    this.futureSquaresStates.set([...checkedSquareBehaviour,...unCheckedSquareBehaviour])
+    this._squaresStates.set([...checkedSquareBehaviour,...unCheckedSquareBehaviour])
   }
-
 }

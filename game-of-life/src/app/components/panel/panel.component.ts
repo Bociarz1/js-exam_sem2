@@ -1,4 +1,4 @@
-import {ChangeDetectionStrategy, Component} from '@angular/core';
+import {ChangeDetectionStrategy, Component, inject} from '@angular/core';
 import {GolService} from "../../services/gol.service";
 import {GolStatus} from "../../enums/game-status.enum";
 
@@ -6,14 +6,19 @@ import {GolStatus} from "../../enums/game-status.enum";
   selector: 'gol-panel',
   standalone: true,
   imports: [],
-  templateUrl: './panel.component.html',
-  styleUrl: './panel.component.scss',
+  template: `
+    @if(golService.status() === GolStatus.PREPARING) {
+      <button (click)="handleStartGameBtn()">START game</button>
+    } @else {
+      <button (click)="handleStopGameBtn()">STOP game</button>
+    }
+  `,
+  styles: '',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PanelComponent {
   protected readonly GolStatus = GolStatus;
-constructor(protected readonly golService: GolService) {
-}
+  protected readonly golService = inject(GolService);
 protected handleStartGameBtn(): void {
   this.golService.startGame()
 }

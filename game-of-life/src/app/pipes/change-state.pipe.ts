@@ -1,17 +1,22 @@
 import { Pipe, PipeTransform } from '@angular/core';
 import {ISquareState} from "../interfaces/square.interface";
+import {SquareUtil} from "../utils/square.util";
 
 @Pipe({
-  name: 'changeState',
+  name: 'checkedState',
   standalone: true,
   pure: true
 })
 export class ChangeStatePipe implements PipeTransform {
 
-  transform(coordinates: [number,number], futureSquaresBehaviour: ISquareState[]): boolean | undefined {
+  transform(coordinates: [number,number], squares: ISquareState[]): boolean {
     const [y,x] = coordinates || []
-    const square = futureSquaresBehaviour.find((item: ISquareState) => item.y === y && item.x === x)
-    return square?.futureChecked;
+    const indexOfSquare = SquareUtil.getIndexOfSquare(y,x,squares)
+    if (indexOfSquare === -1) {
+      return false
+    } else {
+      return squares[indexOfSquare].checked ?? false
+    }
   }
 
 }
